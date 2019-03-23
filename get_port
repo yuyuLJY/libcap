@@ -1,0 +1,181 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <pcap.h>
+
+#define PCAP_DATABUF_MAX 65535
+
+#define ETHERTYPE_IPV4 0x0800
+#define ETHERTYPE_IPV6 0x86DD
+
+typedef unsigned char   u_int8;
+typedef unsigned short  u_int16;
+typedef unsigned int    u_int32;
+typedef unsigned long   u_int64;
+
+/*MAC头，总长度14字节 */
+typedef struct _eth_hdr{
+    u_int8 dst_mac[6];
+    u_int8 src_mac[6];
+    u_int16 eth_type;
+}eth_hdr;
+eth_hdr *ethernet;
+
+/*IP头*/
+typedef struct _ip_hdr{
+    u_int8 ver_hl;    //版本和头长
+    u_int8 serv_type; //服务类型
+    u_int16 pkt_len;  //包总长
+    u_int16 re_mark;  //重组标志
+    u_int16 flag_seg; //标志位和段偏移量
+    u_int8 surv_tm;    //生存时间
+    u_int8 protocol;  //协议码（判断传输层是哪一个协议）
+    u_int16 h_check;  //头检验和
+    u_int32 src_ip;   //源ip
+    u_int32 dst_ip;   //目的ip
+    u_int32 option;   //可选选项
+}ip_hdr;
+ip_hdr *ip;
+
+/*TCP头,总长度20字节，不包括可选选项*/
+typedef struct _tcp_hdr{
+    u_int16 sport;     //源端口
+    u_int16 dport;     //目的端口
+    u_int32 seq;       //序列号
+    u_int32 ack;       //确认序号
+    u_int8  head_len;  //头长度
+    u_int8  flags;     //保留和标记位
+    u_int16 wind_size; //窗口大小
+    u_int16 check_sum; //校验和
+    u_int16 urgent_p;  //紧急指针
+}tcp_hdr;
+tcp_hdr *tcp;
+
+/*UDP头，总长度8个字节*/
+typedef struct _udp_hdr{
+    u_int16 sport;     //源端口
+    u_int16 dport;     //目的端口
+    u_int16 pktlen;    //UDP头和数据的总长度
+    u_int16 check_sum; //校验和
+}udp_hdr;
+udp_hdr *udp;
+
+//ip整型转换点分十进制
+char *InttoIpv4str(u_int32 num){
+    char* ipstr = (char*)calloc(128, sizeof(char*)); 
+  
+    if (ipstr)
+        sprintf(ipstr, "%d.%d.%d.%d", num >> 24 & 255, num >> 16 & 255, num >> 8 & 255, num & 255);
+    else
+        printf("failed to Allocate memory...");
+    
+    return ipstr;
+}
+
+void pcap_callback(u_char *useless,const struct pcap_pkthdr *pkthdr, const u_char *packet)
+{
+    printf("data len:%u\n", pkthdr->caplen); //抓到时的数据长度
+    printf("packet size:%u\n", pkthdr->len); //数据包实际的长度
+
+    /*解析数据链路层 以太网头*/
+    ethernet = (struct _eth_hdr*)packet;
+    u_int64 src_mac = ntohs( ethernet->src_mac );
+    u_int64 dst_mac = ntohs( ethernet->dst_mac );
+   
+    printf("src_mac:%lu\n",src_mac);
+    printf("dst_mac:%lu\n",dst_mac);
+    printf("eth_type:%u\n",ethernet->eth_type);
+    
+    u_int32 eth_len = sizeof(struct _eth_hdr);  //以太网头的长度
+    u_int32 ip_len; //ip头的长度
+    u_int32 tcp_len = sizeof(struct _tcp_hdr);  //tcp头的长度
+    u_int32 udp_len = sizeof(struct _udp_hdr);  //udp头的长度
+    
+    /*解析网络层  IP头*/
+    if(ntohs(ethernet->eth_type) == ETHERTYPE_IPV4){  //IPV4
+        printf("It's IPv4!\n");
+        
+        ip = (struct _ip_hdr*)(packet + eth_len);
+        ip_len = (ip->ver_hl & 0x0f)*4;            //ip头的长度
+        u_int32 saddr = (u_int32)ntohl(ip->src_ip); //网络字节序转换成主机字节序
+        u_int32 daddr = (u_int32)ntohl(ip->dst_ip);
+        
+        printf("eth_len:%u  ip_len:%u  tcp_len:%u  udp_len:%u\n", eth_len, ip_len, tcp_len, udp_len);
+        
+        printf("src_ip:%s\n", InttoIpv4str(saddr));  //源IP地址
+        printf("dst_ip:%s\n", InttoIpv4str(daddr));  //目的IP地址
+        
+        printf("ip->proto:%u\n", ip->protocol);      //传输层用的哪一个协议
+        
+        /*解析传输层  TCP、UDP、ICMP*/
+        if(ip->protocol == 6){         //TCP
+            tcp = (struct _tcp_hdr*)(packet + eth_len + ip_len);
+            printf("tcp_sport = %u\n", tcp->sport);
+            printf("tcp_dport = %u\n", tcp->dport);
+            
+/**********(pcaket + eth_len + ip_len + tcp_len)就是TCP协议传输的正文数据了***********/
+
+        }else if(ip->protocol == 17){  //UDP
+            udp = (struct _udp_hdr*)(packet + eth_len + ip_len);
+            printf("udp_sport = %u\n", udp->sport);
+            printf("udp_dport = %u\n", udp->dport);
+            
+/**********(pcaket + eth_len + ip_len + udp_len)就是UDP协议传输的正文数据了***********/
+            
+        }else if(ip->protocol == 1){   //ICMP
+            
+        }
+        
+    }else if(ntohs(ethernet->eth_type) == ETHERTYPE_IPV6){ //IPV6
+        printf("It's IPv6!\n");
+    }
+    
+    printf("============================================\n");
+}
+
+int main()
+{
+    char *dev;  //设备名
+    char errbuf[PCAP_ERRBUF_SIZE] = {}; //PCAP_ERRBUF_SIZE在pcap.h中已经定义
+    bpf_u_int32 netp, maskp;  //网络号和掩码
+    pcap_t *handler;          //数据包捕获描述字
+    struct bpf_program *fp;   
+    char *filter_str = "port 9000";  //过滤条件
+    
+    /*Find network devices*/
+    if((dev = pcap_lookupdev(errbuf)) == NULL){
+        printf("lookupdev failed:%s\n", errbuf);
+        exit(1);
+    }else{
+        printf("Device:%s\n", dev);
+    }
+    
+    /*Get the network number and mask of the network device*/
+    if(pcap_lookupnet(dev, &netp, &maskp, errbuf) == -1){
+        printf("%s\n", errbuf);
+        exit(1);
+    }
+    
+    /*Open network device*/
+    if((handler = pcap_open_live(dev, PCAP_DATABUF_MAX, 1, 0, errbuf)) == NULL){
+        printf("%s\n", errbuf);
+        exit(1);
+    }
+    
+    /*Compiling and setting filtering conditions*/
+    if(pcap_compile(handler, fp, filter_str, 0, maskp) == -1){
+        printf("pcap_compile error...\n");
+        exit(1);
+    }
+    if(pcap_setfilter(handler, fp) == -1){
+        printf("pcap_setfilter error...\n");
+        exit(1);
+    }
+    
+    /*Capturing and processing data packets*/
+    if(pcap_loop(handler, -1, pcap_callback, NULL) == -1){
+        printf("pcap_loop error...\n");
+        pcap_close(handler);
+    }
+    
+    return 0;    
+}
