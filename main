@@ -97,18 +97,14 @@ int main()
   
   //获取设备
   devStr = pcap_lookupdev(errBuf);
-  
-  if(devStr)
-  {
-    printf("success: device: %s\n", devStr);
-  }
-  else
+  //判断设备是否获取成功
+  if(!devStr)
   {
     printf("error: %s\n", errBuf);
     exit(1);
   }
   
-  /* open a device, wait until a packet arrives */
+  //找到设备以后，需要获取设备接口
   pcap_t * device = pcap_open_live(devStr, 65535, 1, 0, errBuf);
   
   if(!device)
@@ -117,10 +113,10 @@ int main()
     exit(1);
   }
   
-  /* wait loop forever */
-  int id = 0;
-  pcap_loop(device, -1, getPacket, (u_char*)&id);
+  //循环获取消息
+  pcap_loop(device, -1, getPacket, (u_char*)&0);
   
+  //关闭设备接口
   pcap_close(device);
  
   return 0;
