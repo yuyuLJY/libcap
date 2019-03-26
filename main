@@ -2,25 +2,46 @@
 #include <time.h>
 #include <stdlib.h>
 #include <stdio.h>
-int getSum(char *s);
-int getSum(char *s){
-int sum=0;
-int len = strlen(s);
-int t;
-for(int i=0;i<len;i++){
-if(s[i]<='9') t = s[i]-'0';
-else t=s[i]-'a'+10;
-sum = sum*16+t;
-}
-return sum;
+
+
+//写进文档
+//char s[][15]={"sourceIp:172.20.109.88 targetIp:125.39.45.57 sourcePort:8000 targetPort:4015",
+//"sourceIp:172.20.109.88 targetIp:202.118.224.101 sourcePort:3457 targetPort:56360",......};
+void writeToTxt(char s[][100]){
+    FILE *fp;
+    //需要判断是否打开成功
+    if((fp=fopen("d:\\yuyu\\ip_port.txt","w"))==NULL)
+    {
+        printf("Cannot open the file,strike any key to exit!\n");
+        getchar();
+        exit(0);
+    }
+    for(int i=0;i<100;i++){
+        fputs(s[i],fp);
+    }
+    fclose(fp);//关闭
 }
 
- 
+//十六进制转换成十进制
+int getSum(char *s){
+ int sum=0;
+ int len = strlen(s);
+ int t;
+ for(int i=0;i<len;i++){
+  if(s[i]<='9') t = s[i]-'0';
+  else t=s[i]-'a'+10;
+  sum = sum*16+t;
+ }
+ return sum;
+}
+
+//对抓取到的数据进行分析
 void getPacket(u_char * arg, const struct pcap_pkthdr * pkthdr, const u_char * packet)
 {
   int * id = (int *)arg;
   
   printf("id: %d\n", ++(*id));
+  //数据报文的长度可以使用pcap_pkthdr来获取
   printf("Packet length: %d\n", pkthdr->len);
   printf("Number of bytes: %d\n", pkthdr->caplen);
   
@@ -33,7 +54,7 @@ void getPacket(u_char * arg, const struct pcap_pkthdr * pkthdr, const u_char * p
       printf("\n");
     }
   }
-//ARP
+  
   printf("\n");
   printf("SourceIP: ");
   for(int k=26;k<=29;k++){
@@ -74,7 +95,7 @@ int main()
 {
   char errBuf[PCAP_ERRBUF_SIZE], * devStr;
   
-  /* get a device*/
+  //获取设备
   devStr = pcap_lookupdev(errBuf);
   
   if(devStr)
