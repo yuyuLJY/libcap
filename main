@@ -1,0 +1,106 @@
+#include <pcap.h>
+#include <time.h>
+#include <stdlib.h>
+#include <stdio.h>
+int getSum(char *s);
+int getSum(char *s){
+int sum=0;
+int len = strlen(s);
+int t;
+for(int i=0;i<len;i++){
+if(s[i]<='9') t = s[i]-'0';
+else t=s[i]-'a'+10;
+sum = sum*16+t;
+}
+return sum;
+}
+
+ 
+void getPacket(u_char * arg, const struct pcap_pkthdr * pkthdr, const u_char * packet)
+{
+  int * id = (int *)arg;
+  
+  printf("id: %d\n", ++(*id));
+  printf("Packet length: %d\n", pkthdr->len);
+  printf("Number of bytes: %d\n", pkthdr->caplen);
+  
+  int i;
+  for(i=0; i<pkthdr->len; ++i)
+  {
+    printf(" %02x", packet[i]);
+    if( (i + 1) % 16 == 0 )
+    {
+      printf("\n");
+    }
+  }
+//ARP
+  printf("\n");
+  printf("SourceIP: ");
+  for(int k=26;k<=29;k++){
+     printf("%d",packet[k]);
+     if(k!=29){
+     printf(".");
+     }	
+  }
+printf("\n");
+
+printf("targetIP: ");
+  for(int k=30;k<=33;k++){
+     printf("%d",packet[k]);
+     if(k!=33){
+     printf(".");
+     }	
+  }
+printf("\n");
+
+printf("SourcePort: ");
+//int p1 = getSum(itoa(packet[34]));
+//int p2 = getSum(itoa(packet[35]));
+//int sp = p1*256+p2;
+//printf("shiliu1 %X\n",packet[34]);
+//printf("shiliu2 %X\n",packet[35]);
+//printf("shiliu1 yidong %X\n",packet[34]<<8);
+//printf("shiliusum %X\n",(packet[34]<<8)+packet[35]);
+printf("%d",(packet[34]<<8)+packet[35]);
+printf("\n");
+
+
+printf("targetPort: ");
+printf("%d",(packet[36]<<8)+packet[37]);
+printf("\n\n");
+}
+ 
+int main()
+{
+  char errBuf[PCAP_ERRBUF_SIZE], * devStr;
+  
+  /* get a device*/
+  devStr = pcap_lookupdev(errBuf);
+  
+  if(devStr)
+  {
+    printf("success: device: %s\n", devStr);
+  }
+  else
+  {
+    printf("error: %s\n", errBuf);
+    exit(1);
+  }
+  
+  /* open a device, wait until a packet arrives */
+  pcap_t * device = pcap_open_live(devStr, 65535, 1, 0, errBuf);
+  
+  if(!device)
+  {
+    printf("error: pcap_open_live(): %s\n", errBuf);
+    exit(1);
+  }
+  
+  /* wait loop forever */
+  int id = 0;
+  pcap_loop(device, -1, getPacket, (u_char*)&id);
+  
+  pcap_close(device);
+ 
+  return 0;
+}
